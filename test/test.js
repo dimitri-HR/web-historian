@@ -131,6 +131,7 @@ describe('archive helpers', function() {
       var total = 2;
 
       archive.isUrlArchived('www.example.com', function (exists) {
+        console.log('exists', exists);
         expect(exists).to.be.true;
         if (++counter === total) { done(); }
       });
@@ -155,4 +156,3 @@ describe('archive helpers', function() {
     });
   });
 });
-
