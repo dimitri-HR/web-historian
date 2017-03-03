@@ -10,60 +10,64 @@ var headers = {
   'Content-Type': 'text/html'
 };
 
-exports.headers = headers;
 
-exports.serveAssets = function(res, asset, callback) {
+var collectData = function(request, callback) {
+  var data = '';
+  request.on('data', function(chunk) {
+    data += chunk;
+  });
+  request.on('end', function() {
+    data = data.split('=')[1];
+    console.log('LINE 22 -data is ', data);
+    callback(data);
+  });
+};
+
+exports.paths = {
+  siteAssets: path.join(__dirname, '../web/public'),
+  archivedSites: path.join(__dirname, '../archives/sites'),
+  list: path.join(__dirname, '../archives/sites.txt')
+};
+
   // Write some code here that helps serve up your static files!
   // (Static files are things like html (yours or archived from others...),
   // css, or anything that doesn't change oen.)
 
+exports.serveAssets = function(res, asset, callback) {
+  var encoding = 'utf8';
 
-
-  fs.readFile(archive.paths.siteAssets + asset, null, (err, data) => {
-    // if (true) {}
-
+  fs.readFile(archive.paths.siteAssets + asset, encoding, (err, data) => {
+    // file not found in /web/public
     if (err) {
-      // res.writeHead(404, headers);
-      // res.end('No file')
-      throw err;
+      fs.readFile(archive.paths.archivedSites + '/' + asset, encoding, (err, data) => {
+        // not found in /archives/sites
+        if (err) {
+          exports.send404(res);
+        } else {
+          exports.sendResponse(res, data);
+        }
+      });
     } else {
-    // console.log(data);
+      exports.sendResponse(res, data);
     }
-    callback(data);
   });
-
-
-  exports.paths = {
-    siteAssets: path.join(__dirname, '../web/public'),
-    archivedSites: path.join(__dirname, '../archives/sites'),
-    list: path.join(__dirname, '../archives/sites.txt')
-  };
-
-
-  // console.log(res, asset, callback);
-
 };
 
-// switch (extname) {
-//     case '.js':
-//         contentType = 'text/javascript';
-//         break;
-//     case '.css':
-//         contentType = 'text/css';
-//         break;
-//     case '.json':
-//         contentType = 'application/json';
-//         break;
-//     case '.png':
-//         contentType = 'image/png';
-//         break;
-//     case '.jpg':
-//         contentType = 'image/jpg';
-//         break;
-//     case '.wav':
-//         contentType = 'audio/wav';
-//         break;
-// }
+exports.sendResponse = function(res, data, statusCode) {
+  statusCode = statusCode || 200;
+  res.writeHead(statusCode, headers);
+  res.end(data);
+};
+
+exports.send404 = function(res) {
+  exports.sendResponse(res, '404 Page Not Found', 404);
+};
+
+exports.sendRedirect = function(res, location, status) {
+  status = status || 302;
+  res.writeHead(status, location);
+  res.end();
+};
 
 
 
@@ -92,21 +96,67 @@ var getHeaders = function(ext) {
 exports.actions = {
   'GET': function(req, res) {
     var ext = path.extname(req.url);
-
-    headers['Content-Type'] = getHeaders(ext);
+    console.log('109 -- req.url', req.url);
 
     if (req.url === '/') {
-      var fileName = '/index.html';
+      var url = '/index.html';
     } else {
-      var fileName = req.url;
+      var url = req.url;
     }
-    res.writeHead(200, headers);
-    exports.serveAssets(res, fileName, function (data) {
-      res.end(data);
+    exports.serveAssets(res, url, function (data) {
+
+
+    // res.end(data);
     });
-    // utils.sendResponse(response, {results: messages});
-  }
+  },
+  'POST': function(req, res) {
+    console.log('hit POST section');
+    collectData(req, function(url) {
+      console.log('line 125 URL', url);
+
+      archive.isUrlArchived(url, function(isFound) {
+        if (isFound) {
+          exports.serveAssets(res, url);
+        } else {
+          archive.isUrlInList(url, function(isFound) {
+            if (!isFound) {
+              archive.addUrlToList(url, function(res) {
+                console.log('TESTING');
+                // exports.sendResponse(res, data, 302);
+                exports.sendRedirect(res, '/loading.html');
+              });
+            }
+            exports.sendRedirect(res, '/loading.html');
+          });
+        }
+      });
+
+      // archive.addUrlToList(url, function() {
+      //   // console.log('data # 2', url);
+      // res.writeHead(302, headers); //CHANGED TO 302
+      // res.end();
+    // });
+    });
+  } ///CLOSE POST FUNCTION
 };
+
+// 1 - list of sites
+// 2 - sites
+
+// POST request with www.site.com
+// collectData  /// www.google.com
+
+// isUrlInList - in sites.txt
+//   if yes
+//     if archived - > redirect to it
+//       sendRedirect (res, '/google')
+//     else -> loading.html
+//   else
+//     add to sites.txt -> addUrlToList(, function () {
+//       -> loading
+//     })
+
+
 
 //   'POST': function(req, res) {
 //     utils.collectData(req, function(message) {
@@ -144,19 +194,6 @@ exports.actions = {
 //   response.end(JSON.stringify(data));
 // };
 //
-exports.collectData = function(request, callback) {
-  // console.log('request from collect data', request);
-  var data = '';
-  request.on('data', function(chunk) {
-    data += chunk;
-  });
-  request.on('end', function() {
-    data = data.split('=')[1]; //SPLIT DATA
-    console.log('data is ', data); //MOVED INTO REQUEST.ON
-    callback(data);
-    // callback(JSON.parse(data)); //REMOVED JSON.parse
-  });
-};
 
 // exports.makeActionHandler = function(actionMap) {
 //   return function(request, response) {
